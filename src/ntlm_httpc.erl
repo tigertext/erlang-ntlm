@@ -1,5 +1,5 @@
 -module(ntlm_httpc).
--export([request/3]).
+-export([request/3, request_ntlm/3]).
 
 request(Method, Request, Credentials) ->
     Request2 = request_add_header(Request,
