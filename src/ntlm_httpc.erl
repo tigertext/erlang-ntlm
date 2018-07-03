@@ -1,5 +1,5 @@
 -module(ntlm_httpc).
--export([request/3, request_ntlm/3]).
+-export([request/3, request_ntlm/3, debug_request_ntlm/3]).
 
 request(Method, Request, Credentials) ->
     Request2 = request_add_header(Request,
@@ -50,6 +50,27 @@ www_authenticate(Headers) ->
     case proplists:get_value("www-authenticate", Headers) of
         undefined -> undefined;
         Value -> string:tokens(Value, " ")
+    end.
+
+debug_request_ntlm(Method, Request, Credentials) ->
+    Request2 = request_add_header(Request,
+        {"Authorization", "NTLM " ++ base64:encode_to_string(ntlm_auth:negotiate())}),
+    case httpc:request(Method, Request2, [], [{body_format, binary}]) of
+        {ok, {{_Ver, 401, _Phrase}, Headers, _Body}} = Response ->
+            case www_authenticate(Headers) of
+                ["NTLM", Binary] ->
+                    {Workstation, DomainName, UserName, Password} = Credentials,
+                    Request3 = request_add_header(Request,
+                        {"Authorization", "NTLM " ++ base64:encode_to_string(
+                            ntlm_auth:authenticate(Workstation, DomainName, UserName, Password,
+                                base64:decode(Binary)))}),
+                    Resp = httpc:request(Method, Request3, [], [{body_format, binary}]),
+                    {Request2, Request3, Resp};
+                undefined ->
+                    {Request2, no_request3_due_to_undefined, Response}
+            end;
+        OtherResponse ->
+            {Request2, no_request3_due_to_otherResponse, OtherResponse}
     end.
 
 % end of file
